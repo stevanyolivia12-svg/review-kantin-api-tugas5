@@ -3,6 +3,95 @@
 Hands-on ini mengganti akses data dari query SQL manual menjadi **ORM (Drizzle)**,
 tetap memakai arsitektur berlapis (Repository → Service → Controller → Router).
 
+## Frontend React (Tugas 4)
+
+Frontend tersedia di `frontend/` dan memakai React, TypeScript, Fetch API, dan
+React Router. UI mengintegrasikan daftar/detail warung, katalog menu, ulasan,
+like, keranjang belanja, laporan moderasi, dashboard admin, CRUD sesuai role,
+registrasi, login, serta pemeriksaan sesi dengan endpoint backend `/api/v1`.
+Backend dan frontend ditulis menggunakan TypeScript/TSX.
+
+### Menjalankan aplikasi lokal
+
+1. Siapkan SQL Server dan konfigurasi `.env` backend mengikuti bagian
+   konfigurasi di bawah.
+2. Dari root repository, pasang dependency backend dengan `npm install`.
+3. Pasang dependency frontend dengan `npm --prefix frontend install`.
+4. Jalankan backend dari root proyek di terminal pertama dengan `npm.cmd run dev`.
+5. Jalankan UI di terminal kedua dengan `npm.cmd run frontend:dev`, lalu buka
+   `http://localhost:5173`.
+
+Di Command Prompt, perintah yang sama dapat dijalankan sebagai `npm run dev`
+dan `npm run frontend:dev`. Gunakan terminal di root repository (bukan
+`src/`); `npm.cmd` juga menghindari kebijakan PowerShell yang dapat memblokir
+script `npm.ps1`.
+
+Vite meneruskan request `/api/*` ke `http://localhost:3000`, sehingga
+development tidak memerlukan konfigurasi CORS. Untuk backend di host lain,
+salin `frontend/.env.example` menjadi `frontend/.env.local` dan ubah
+`BACKEND_URL`. `VITE_API_BASE_URL` dapat diubah bila prefix API berbeda.
+Jangan menyimpan kredensial atau secret di environment frontend.
+
+### Integrasi dan pengujian
+
+- Daftar warung memakai `GET /api/v1/stalls`, termasuk pencarian nama, filter
+  kategori, pagination, loading, empty, dan error state.
+- Detail warung mengambil data terbaru melalui `GET /api/v1/stalls/:id`.
+- Halaman Menu mengambil seluruh item dari `GET /api/v1/menu-items`, mendukung
+  pencarian, filter warung, filter ketersediaan, dan CRUD bagi admin/pemilik
+  warung melalui endpoint `/api/v1/menu-items`. Detail warung juga menampilkan
+  menu miliknya dari `GET /api/v1/stalls/:id/menus`.
+- Pengunjung harus masuk untuk menambahkan menu tersedia ke keranjang; setelah
+  berhasil masuk mereka kembali ke katalog/detail asal. Pengguna masuk dapat
+  mengubah jumlah, menghapus item, dan melihat total sementara. Keranjang
+  disimpan di browser. Fitur ini belum membuat pesanan atau memproses pembayaran.
+- Tombol tambah warung tersedia pada daftar/katalog untuk admin dan owner yang
+  masuk. Pengunjung dapat membuka login melalui tautan pemilik warung; hak
+  tambah/edit/hapus tetap diberlakukan oleh role dan backend.
+- Gambar menu memakai foto hidangan ilustratif dan gambar fallback. Skema
+  `MENU_ITEMS` saat ini belum mempunyai kolom URL/file gambar, jadi gambar ini
+  tidak disimpan atau diunggah ke database.
+- Ulasan memakai `GET/POST/DELETE /api/v1/reviews`; customer dapat memberi
+  ulasan, like/unlike ulasan sendiri memakai endpoint `/api/v1/likes`, dan
+  melaporkan ulasan melalui `POST /api/v1/flags`. Admin dapat meninjau dan
+  memperbarui status laporan serta mengelola pengguna dan audit log dari
+  `/admin`.
+- Endpoint `GET /api/v1/likes` hanya mengembalikan like milik token aktif.
+  `POST /api/v1/flags` membuat laporan dengan identitas pelapor diambil dari
+  JWT; klien tidak dapat mengirim ID pelapor sendiri.
+- Admin dapat membuat, mengubah, dan menghapus warung. Owner dapat membuat
+  warung dan hanya mengubah warung miliknya; hanya admin yang dapat menghapus
+  warung. Batasan penghapusan diverifikasi kembali oleh backend. Customer hanya
+  dapat melihat katalog.
+- Registrasi memakai `POST /api/v1/auth/register` (akun baru ber-role
+  customer), login memakai `POST /api/v1/auth/login`, dan sesi diperiksa
+  melalui `GET /api/v1/auth/me`. Tombol keluar menghapus token lokal.
+- Respons `401`, `403`, error validasi, error jaringan, dan proses pengiriman
+  form ditampilkan sebagai feedback.
+
+Jalankan `npm run frontend:build` dari root untuk typecheck dan build frontend.
+Pengujian manual terhadap database memerlukan SQL Server aktif dan akun dengan
+role yang sesuai.
+
+Checklist uji manual setelah backend dan SQL Server aktif:
+
+1. Buka daftar warung, cari/filter, pindah halaman, dan buka detail warung;
+   pastikan detail dan total berasal dari API.
+2. Masuk sebagai admin, buat warung, ubah, lalu hapus; muat ulang daftar dan
+   pastikan perubahan tetap tersimpan.
+3. Masuk sebagai owner, buat warung dan ubah warungnya. Coba mengubah warung
+   owner lain serta menghapus warung dan pastikan backend mengembalikan `403`.
+4. Daftarkan customer, masuk, muat ulang halaman untuk memeriksa `/auth/me`,
+   lalu pastikan kontrol pengelolaan tidak tersedia.
+5. Di halaman Menu, cek seluruh item, gambar/fallback, pencarian, filter,
+   penambahan/perubahan/status ketersediaan/penghapusan menu sebagai admin
+   atau owner.
+6. Sebagai customer, buat ulasan, like/unlike, laporkan ulasan; sebagai admin
+   ubah status laporan, buat pengguna, dan baca/tulis audit log.
+7. Uji token kedaluwarsa/tidak valid (`401`), role yang tidak berizin (`403`),
+   daftar tanpa hasil, dan backend yang tidak tersedia; pastikan feedback
+   terlihat dan data tidak berpura-pura berhasil disimpan.
+
 > File ini adalah sumber langkah utama.
 
 ## Prinsip

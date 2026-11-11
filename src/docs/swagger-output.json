@@ -272,6 +272,9 @@
           "200": {
             "description": "Warung terhapus"
           },
+          "403": {
+            "description": "Hanya admin yang dapat menghapus warung"
+          },
           "404": {
             "description": "Tidak ditemukan"
           }
@@ -531,6 +534,26 @@
       }
     },
     "/api/v1/likes/": {
+      "get": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daftar like milik pengguna aktif"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
       "post": {
         "description": "",
         "parameters": [
@@ -595,6 +618,44 @@
       }
     },
     "/api/v1/flags/": {
+      "post": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "reviewId": {
+                  "type": "number",
+                  "example": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "example": "Alasan laporan"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Laporan dibuat"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
       "get": {
         "description": "",
         "parameters": [

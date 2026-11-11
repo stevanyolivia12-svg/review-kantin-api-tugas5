@@ -8,7 +8,6 @@ const menuItemRouter = Router();
 const menuItemController = new MenuItemController();
 
 menuItemRouter.get('/', (req, res) => menuItemController.getMenuItems(req, res));
-menuItemRouter.post('/', (req, res) => menuItemController.createMenuItem(req, res));
 menuItemRouter.post('/', requireAuth, requireRoles('admin', 'owner'), validateBody(createMenuItemSchema), (req, res) => {
 	// #swagger.security = [{ "bearerAuth": [] }]
 	return menuItemController.createMenuItem(req, res);

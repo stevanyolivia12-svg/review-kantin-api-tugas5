@@ -13,6 +13,15 @@ export class FlagController {
     return respondWithError(res, error);
   }
 
+  createFlag = async (req: Request, res: Response): Promise<Response> => {
+    try {
+      const data = await this.flagService.createFlag(req.body, req.auth!);
+      return res.status(201).json({ status: 'success', data });
+    } catch (error) {
+      return this.handleError(res, error);
+    }
+  };
+
   getFlags = async (req: Request, res: Response): Promise<Response> => {
     try {
       const { status } = res.locals.validatedQuery as { status?: string };

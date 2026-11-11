@@ -14,6 +14,11 @@ export class LikeRepository {
     return rows[0];
   }
 
+  async findByUserId(userId: number) {
+    const db = await getDb();
+    return db.select().from(likes).where(eq(likes.userId, userId)).orderBy(likes.id);
+  }
+
   async findExisting(reviewId: number, userId: number) {
     const db = await getDb();
     const rows = await db

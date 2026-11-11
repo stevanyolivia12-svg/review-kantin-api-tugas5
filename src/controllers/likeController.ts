@@ -13,6 +13,15 @@ export class LikeController {
     return respondWithError(res, error);
   }
 
+  getMyLikes = async (req: Request, res: Response): Promise<Response> => {
+    try {
+      const data = await this.likeService.getLikesByUser(req.auth!.id);
+      return res.status(200).json({ status: 'success', data });
+    } catch (error) {
+      return this.handleError(res, error);
+    }
+  };
+
   createLike = async (req: Request, res: Response): Promise<Response> => {
     try {
       const data = await this.likeService.createLike(req.body, req.auth!);

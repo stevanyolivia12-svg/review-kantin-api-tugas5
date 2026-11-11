@@ -73,6 +73,9 @@ export class StallService {
   }
 
   async deleteStall(id: number, actor: AuthenticatedUser): Promise<StallResponseDto> {
+    if (actor.role !== 'admin') {
+      throw new AppError(403, 'FORBIDDEN', 'Hanya admin yang dapat menghapus warung.');
+    }
     await this.assertCanManage(id, actor);
     const row = await this.stallRepository.remove(id);
     if (!row) throw new Error('STALL_NOT_FOUND');

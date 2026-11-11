@@ -39,8 +39,9 @@ stallRouter.put('/:id', requireAuth, requireRoles('admin', 'owner'), validateIdP
   return stallController.updateStall(req, res);
 });
 
-stallRouter.delete('/:id', requireAuth, requireRoles('admin', 'owner'), validateIdParam, (req, res) => {
+stallRouter.delete('/:id', requireAuth, requireRoles('admin'), validateIdParam, (req, res) => {
   // #swagger.security = [{ "bearerAuth": [] }]
+  // #swagger.responses[403] = { description: 'Hanya admin yang dapat menghapus warung' }
   // #swagger.parameters['id'] = { in: 'path', required: true, type: 'integer' }
   // #swagger.responses[200] = { description: 'Warung terhapus' }
   // #swagger.responses[404] = { description: 'Tidak ditemukan' }

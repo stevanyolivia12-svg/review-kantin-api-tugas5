@@ -9,7 +9,10 @@
     "prestart": "npm run docs:gen",
     "dev": "tsx watch src/index.ts",
     "predev": "npm run docs:gen",
-    "docs:gen": "tsx src/docs/swagger.ts"
+    "docs:gen": "tsx src/docs/swagger.ts",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:preview": "npm --prefix frontend run preview"
   },
   "type": "commonjs",
   "dependencies": {

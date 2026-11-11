@@ -7,6 +7,12 @@ import { createLikeSchema } from '../validators/schemas.ts';
 const likeRouter = Router();
 const likeController = new LikeController();
 
+likeRouter.get('/', requireAuth, (req, res) => {
+  // #swagger.security = [{ "bearerAuth": [] }]
+  // #swagger.responses[200] = { description: 'Daftar like milik pengguna aktif' }
+  return likeController.getMyLikes(req, res);
+});
+
 likeRouter.post('/', requireAuth, requireRoles('customer'), validateBody(createLikeSchema), (req, res) => {
   // #swagger.security = [{ "bearerAuth": [] }]
   /*  #swagger.parameters['body'] = {

@@ -52,6 +52,11 @@ export const createLikeSchema = z.object({
   reviewId: z.number().int().positive(),
 }).strict();
 
+export const createFlagSchema = z.object({
+  reviewId: z.number().int().positive(),
+  reason: optionalText(255),
+}).strict();
+
 export const createAuditLogSchema = z.object({
   action: z.string().trim().min(1).max(50),
   targetTable: z.string().trim().min(1).max(50),

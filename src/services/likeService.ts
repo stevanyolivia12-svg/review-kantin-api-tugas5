@@ -9,10 +9,14 @@ export class LikeService {
     this.likeRepository = likeRepository;
   }
 
+  async getLikesByUser(userId: number) {
+    return this.likeRepository.findByUserId(userId);
+  }
+
   async createLike(input: Omit<CreateLikeInput, 'userId'>, actor: AuthenticatedUser) {
     if (!input.reviewId) throw new Error('LIKE_INVALID_INPUT');
     const existing = await this.likeRepository.findExisting(input.reviewId, actor.id);
-    if (existing) throw new Error('LIKE_ALREADY_EXISTS');
+    if (existing) throw new AppError(409, 'LIKE_ALREADY_EXISTS', 'Kamu sudah menyukai ulasan ini.');
 
     const row = await this.likeRepository.create({ ...input, userId: actor.id });
     if (!row) throw new Error('LIKE_NOT_FOUND');
