@@ -3,7 +3,7 @@ import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
   dialect: 'mssql',
-  schema: './src/db/schema.ts',
+  schema: './backend/db/schema.ts',
   out: './drizzle',
   dbCredentials: {
     server: process.env.DB_SERVER ?? 'localhost',

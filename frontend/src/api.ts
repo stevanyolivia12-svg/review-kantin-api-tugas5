@@ -159,6 +159,10 @@ export async function login(email: string, password: string): Promise<AuthSessio
   return response.data;
 }
 
+export async function logout(token: string): Promise<void> {
+  await request<{ loggedOut: boolean }>('/auth/logout', { method: 'POST', token });
+}
+
 export async function register(name: string, email: string, password: string): Promise<AuthSession> {
   const response = await request<AuthSession>('/auth/register', {
     method: 'POST',
@@ -267,15 +271,36 @@ export async function createManagedUser(
   return response.data;
 }
 
-export async function listAuditLogs(token: string): Promise<AuditLog[]> {
-  const response = await request<AuditLog[]>('/audit-logs', { token });
+export interface AuditLogFilters {
+  page: number;
+  pageSize: number;
+  action?: string;
+  targetTable?: string;
+  targetId?: number;
+  userId?: number;
+  from?: string;
+  to?: string;
+}
+
+export interface AuditLogPage {
+  items: AuditLog[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export async function listAuditLogs(
+  token: string,
+  filters: AuditLogFilters,
+  signal?: AbortSignal,
+): Promise<AuditLogPage> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  }
+  const response = await request<AuditLogPage>(`/audit-logs?${query}`, { token, signal });
   return response.data;
 }
 
-export async function createAuditLog(
-  input: { action: string; targetTable: string; targetId: number; metadata: string | null },
-  token: string,
-): Promise<AuditLog> {
-  const response = await request<AuditLog>('/audit-logs', { method: 'POST', token, body: input });
+export async function getAuditLog(id: number, token: string): Promise<AuditLog> {
+  const response = await request<AuditLog>(`/audit-logs/${id}`, { token });
   return response.data;
 }

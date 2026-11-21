@@ -3,19 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "description": "Hands-on 2 Pertemuan 03 - akses database dengan Drizzle ORM",
-  "main": "src/index.ts",
+  "main": "backend/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx backend/index.ts",
     "prestart": "npm run docs:gen",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch backend/index.ts",
     "predev": "npm run docs:gen",
-    "docs:gen": "tsx src/docs/swagger.ts",
+    "docs:gen": "tsx backend/docs/swagger.ts",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
-    "frontend:preview": "npm --prefix frontend run preview"
+    "frontend:preview": "npm --prefix frontend run preview",
+    "test": "tsx --test test/task5.test.ts",
+    "test:api": "tsx --test test/audit-api.test.ts"
   },
   "type": "commonjs",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^1.0.0-rc.5-5935859",
     "express": "^5.2.1",

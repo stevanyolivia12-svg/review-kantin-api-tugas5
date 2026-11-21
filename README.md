@@ -23,7 +23,7 @@ Backend dan frontend ditulis menggunakan TypeScript/TSX.
 
 Di Command Prompt, perintah yang sama dapat dijalankan sebagai `npm run dev`
 dan `npm run frontend:dev`. Gunakan terminal di root repository (bukan
-`src/`); `npm.cmd` juga menghindari kebijakan PowerShell yang dapat memblokir
+`backend/`); `npm.cmd` juga menghindari kebijakan PowerShell yang dapat memblokir
 script `npm.ps1`.
 
 Vite meneruskan request `/api/*` ke `http://localhost:3000`, sehingga
@@ -55,7 +55,8 @@ Jangan menyimpan kredensial atau secret di environment frontend.
   ulasan, like/unlike ulasan sendiri memakai endpoint `/api/v1/likes`, dan
   melaporkan ulasan melalui `POST /api/v1/flags`. Admin dapat meninjau dan
   memperbarui status laporan serta mengelola pengguna dan audit log dari
-  `/admin`.
+  `/admin`. Audit log dibuat otomatis di backend saat mutasi berhasil dan
+  ditampilkan dengan filter, pagination, serta modal detail.
 - Endpoint `GET /api/v1/likes` hanya mengembalikan like milik token aktif.
   `POST /api/v1/flags` membuat laporan dengan identitas pelapor diambil dari
   JWT; klien tidak dapat mengirim ID pelapor sendiri.
@@ -64,8 +65,9 @@ Jangan menyimpan kredensial atau secret di environment frontend.
   warung. Batasan penghapusan diverifikasi kembali oleh backend. Customer hanya
   dapat melihat katalog.
 - Registrasi memakai `POST /api/v1/auth/register` (akun baru ber-role
-  customer), login memakai `POST /api/v1/auth/login`, dan sesi diperiksa
-  melalui `GET /api/v1/auth/me`. Tombol keluar menghapus token lokal.
+  customer), login memakai `POST /api/v1/auth/login`, logout tercatat melalui
+  `POST /api/v1/auth/logout`, dan sesi diperiksa melalui `GET /api/v1/auth/me`.
+  Logout lokal tetap berjalan meskipun pencatatan audit gagal.
 - Respons `401`, `403`, error validasi, error jaringan, dan proses pengiriman
   form ditampilkan sebagai feedback.
 
@@ -92,13 +94,81 @@ Checklist uji manual setelah backend dan SQL Server aktif:
    daftar tanpa hasil, dan backend yang tidak tersedia; pastikan feedback
    terlihat dan data tidak berpura-pura berhasil disimpan.
 
+## Tugas 5 — Audit Log System
+
+Fitur audit dapat dicoba dari:
+
+- **Frontend:** masuk sebagai Admin, buka `/admin`, lalu pilih tab **Audit log**.
+- **Backend:** Swagger tetap dapat dibuka langsung di
+  `http://localhost:3000/docs` jika diperlukan untuk pengujian, tanpa tautan
+  di navigasi frontend.
+- **Health check:** `http://localhost:3000/health`.
+- Endpoint daftar/detail tersedia di `GET /api/audit-logs` dan
+  `GET /api/audit-logs/:id`, serta tetap tersedia di prefix `/api/v1`.
+
+Endpoint audit hanya dapat digunakan Admin. Daftar mendukung `page`,
+`pageSize`, `action`, `targetTable`, `targetId`, `userId`, `from`, dan `to`.
+Filter digabung dengan AND. Detail menampilkan user dari JOIN, metadata, IP,
+dan user-agent. Audit tidak dapat ditulis dari API publik; backend membuat
+log dalam transaksi yang sama dengan mutasi menu, warung, ulasan, like,
+laporan, akun, dan order. `POST /api/v1/orders` hanya menerima customer
+terautentikasi; identitas/nama customer serta snapshot menu dan harga diambil
+dari database, bukan dipercaya dari body. Pembuatan order, item, dan audit
+`CREATE_ORDER` berada dalam satu transaksi. Endpoint ini tidak menambahkan UI
+checkout atau memproses pembayaran. LOGIN/LOGOUT dicatat best-effort dengan
+`result`, `role`, IP, dan user-agent tanpa menyimpan kredensial atau token.
+
+Siapkan/upgrade tabel audit, indeks filter, dan trigger append-only secara
+idempotent dari root repository:
+
+```powershell
+sqlcmd -S localhost -E -C -d review_kantin -b -i .\db\01-audit-log-schema.sql
+```
+
+Script mempertahankan catatan lama dan aman dijalankan berulang kali. Uji
+append-only tanpa mengubah baris memakai:
+
+```powershell
+sqlcmd -S localhost -E -C -d review_kantin -b -i .\db\03-audit-samples.sql
+```
+
+Seed contoh audit hanya menambah catatan yang belum ada:
+
+```powershell
+sqlcmd -S localhost -E -C -d review_kantin -b -i .\db\02-audit-seed.sql
+```
+
+Jalankan unit test dengan `npm.cmd test`. Untuk uji endpoint, pastikan backend
+aktif di terminal lain lalu jalankan `npm.cmd run test:api`; test ini membuat
+token role sementara dari `JWT_SECRET` lokal dan memeriksa akses, filter,
+pagination, detail, validasi, serta akses/validasi pembuatan order. Uji
+login/logout yang memeriksa catatan database ikut berjalan bila
+`TEST_ADMIN_PASSWORD` tersedia sebagai environment variable sementara;
+nilainya tidak ditulis ke file atau output. Untuk menguji satu order berhasil
+dan memverifikasi audit `CREATE_ORDER` langsung melalui API, set
+`TASK5_CREATE_ORDER_TEST=1` sebelum test API. Ini akan membuat satu order uji
+permanen di database lokal; test tidak menghapus data.
+
+Untuk memeriksa catatan di SQL Server Management Studio:
+
+```sql
+SELECT TOP (20) a.id, a.user_id, u.name AS user_name, u.email AS user_email,
+       a.action, a.target_table, a.target_id, a.metadata, a.created_at
+FROM dbo.AUDIT_LOGS AS a
+LEFT JOIN dbo.USERS AS u ON u.id = a.user_id
+ORDER BY a.created_at DESC, a.id DESC;
+```
+
+Di UI, buka tab **Audit log** untuk filter/pagination/modal detail dan Swagger
+untuk mencoba endpoint JSON, termasuk `POST /api/v1/orders`.
+
 > File ini adalah sumber langkah utama.
 
 ## Prinsip
 
 - **Skema DDL tetap dikelola di `../db/*.sql`** (recall ERD di SQL Server).
 - Drizzle dipakai untuk **query bertipe** dari aplikasi.
-- `src/db/schema.ts` **ditulis manual**, bukan hasil `drizzle-kit pull`. Alasannya:
+- `backend/db/schema.ts` **ditulis manual**, bukan hasil `drizzle-kit pull`. Alasannya:
   intropeksi (`pull`) Drizzle untuk MSSQL masih **RC** dan belum stabil.
 
 ## Prasyarat
@@ -130,13 +200,13 @@ npm install -D typescript @types/express @types/mssql @types/node tsx drizzle-ki
 
 ```json
 {
-  "main": "src/index.ts",
+  "main": "backend/index.ts",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx backend/index.ts",
     "prestart": "npm run docs:gen",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch backend/index.ts",
     "predev": "npm run docs:gen",
-    "docs:gen": "tsx src/docs/swagger.ts"
+    "docs:gen": "tsx backend/docs/swagger.ts"
   },
   "type": "commonjs"
 }
@@ -152,7 +222,7 @@ Copy-Item .env.example .env
 DB_SERVER=localhost
 DB_PORT=1433
 DB_USER=praktikum_user
-DB_PASSWORD=Praktikum2026!
+DB_PASSWORD=replace-with-your-database-password
 DB_NAME=review_kantin
 DB_ENCRYPT=false
 DB_TRUST_SERVER_CERTIFICATE=true
@@ -161,7 +231,7 @@ JWT_SECRET=replace-this-with-a-random-secret-at-least-32-characters
 
 > Nilai yang mengandung `#` wajib dibungkus tanda kutip (dotenv menganggap `#` komentar).
 
-## Langkah 3 — Definisikan schema (`src/db/schema.ts`)
+## Langkah 3 — Definisikan schema (`backend/db/schema.ts`)
 
 Kita memetakan tabel SQL Server ke objek TypeScript memakai `mssqlTable` dan
 builder kolom `mssql-core`.
@@ -199,10 +269,10 @@ export const menuItems = mssqlTable('MENU_ITEMS', {
 });
 ```
 
-`src/db/schema.ts` juga memuat `reviews`, `likes`, `flags`, dan `auditLogs`
+`backend/db/schema.ts` juga memuat `reviews`, `likes`, `flags`, dan `auditLogs`
 (tabel lain dari ERD yang belum dipakai di hands-on ini).
 
-## Langkah 4 — Inisialisasi koneksi (`src/db/index.ts`)
+## Langkah 4 — Inisialisasi koneksi (`backend/db/index.ts`)
 
 ```ts
 import 'dotenv/config';
@@ -245,7 +315,7 @@ export function getDb() {
 
 ## Langkah 5 — Repository dengan query builder
 
-`src/repositories/stallRepository.ts`:
+`backend/repositories/stallRepository.ts`:
 
 ```ts
 import { and, count, eq, like, type SQL } from 'drizzle-orm';
@@ -285,7 +355,7 @@ export class StallRepository {
 }
 ```
 
-Join contoh (menu items) — `src/repositories/menuItemRepository.ts`:
+Join contoh (menu items) — `backend/repositories/menuItemRepository.ts`:
 
 ```ts
 import { eq } from 'drizzle-orm';
@@ -302,7 +372,7 @@ export class MenuItemRepository {
 
 ## Langkah 6 — Service (mapping + logika bisnis)
 
-`src/services/stallService.ts` memetakan row DB menjadi DTO camelCase dan menghitung
+`backend/services/stallService.ts` memetakan row DB menjadi DTO camelCase dan menghitung
 `isPopular` (rating ≥ 4.7). Perhatikan: `decimal` dari driver berbentuk **string**,
 jadi di-`Number(...)`.
 
@@ -315,9 +385,9 @@ private toDto(row: StallRow): StallResponseDto {
 
 ## Langkah 7 — Controller, Router, dan Entry point
 
-- `src/controllers/stallController.ts` — handler Express, memetakan `STALL_NOT_FOUND` → 404.
-- `src/routes/stallRouter.ts` — pemetaan endpoint.
-- `src/index.ts` — server Express + `GET /health` (`SELECT 1` via Drizzle).
+- `backend/controllers/stallController.ts` — handler Express, memetakan `STALL_NOT_FOUND` → 404.
+- `backend/routes/stallRouter.ts` — pemetaan endpoint.
+- `backend/index.ts` — server Express + `GET /health` (`SELECT 1` via Drizzle).
 
 ## Langkah 8 — Jalankan & uji
 
@@ -367,8 +437,8 @@ lewat komentar singkat `#swagger.*` di dalam handler. Hasilnya disajikan lewat
 
 Alur:
 
-1. `npm run docs:gen` — memindai `src/index.ts` (beserta router yang diimpor) dan
-   menghasilkan `src/docs/swagger-output.json`.
+1. `npm run docs:gen` — memindai `backend/index.ts` (beserta router yang diimpor) dan
+   menghasilkan `backend/docs/swagger-output.json`.
 2. `npm run dev` — menyajikan spec tersebut di `/docs`.
    (`predev`/`prestart` otomatis menjalankan `docs:gen` sebelum server start.)
 
@@ -394,10 +464,10 @@ stallRouter.post('/', (req, res) => {
 
 File terkait:
 
-- `src/docs/swagger.ts` — definisi `info`, `servers`, `definitions.StallInput`, lalu `swaggerAutogen()(outputFile, endpointsFiles, doc)`.
-- `src/docs/swagger-output.json` — **hasil generate** (di-`.gitignore`, jangan diedit manual).
-- `src/routes/stallRouter.ts` — handler inline + `#swagger.parameters`/`#swagger.responses`.
-- `src/index.ts` — `app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));`
+- `backend/docs/swagger.ts` — definisi `info`, `servers`, `definitions.StallInput`, lalu `swaggerAutogen()(outputFile, endpointsFiles, doc)`.
+- `backend/docs/swagger-output.json` — **hasil generate** (di-`.gitignore`, jangan diedit manual).
+- `backend/routes/stallRouter.ts` — handler inline + `#swagger.parameters`/`#swagger.responses`.
+- `backend/index.ts` — `app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));`
 
 Buka `/docs`, lalu klik **Try it out** untuk mengisi parameter/body dan mengirim request.
 
@@ -426,7 +496,7 @@ hands-on-2-orm-drizzle/
 ├─ .env.example
 ├─ drizzle.config.ts          # konfigurasi drizzle-kit (referensi)
 ├─ package.json  tsconfig.json
-└─ src/
+└─ backend/
    ├─ db/
    │  ├─ schema.ts            # pemetaan tabel (manual)
    │  └─ index.ts            # koneksi Drizzle

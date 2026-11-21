@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiError, createAuditLog, createManagedUser, listAuditLogs, listFlags, listUsers, updateFlag } from './api';
+import { ApiError, createManagedUser, getAuditLog, listAuditLogs, listFlags, listUsers, updateFlag, type AuditLogFilters } from './api';
 import { useAuth } from './auth';
 import type { AuditLog, Flag, ManagedUser } from './types';
 
@@ -10,7 +10,7 @@ export function AdminPage() {
   const [tab, setTab] = useState<AdminTab>('users');
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [flags, setFlags] = useState<Flag[]>([]);
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [logsTotal, setLogsTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -21,12 +21,16 @@ export function AdminPage() {
     if (!token) return;
     setLoading(true);
     setError(null);
-    Promise.all([listUsers(token), listFlags(token), listAuditLogs(token)])
-      .then(([userRows, flagRows, logRows]) => {
+    Promise.all([
+      listUsers(token),
+      listFlags(token),
+      listAuditLogs(token, { page: 1, pageSize: 1 }),
+    ])
+      .then(([userRows, flagRows, logPage]) => {
         if (!active) return;
         setUsers(userRows);
         setFlags(flagRows);
-        setLogs(logRows);
+        setLogsTotal(logPage.pagination.total);
       })
       .catch((reason: unknown) => {
         if (!active) return;
@@ -59,7 +63,7 @@ export function AdminPage() {
         <div className="admin-stats">
           <div><strong>{users.length}</strong><span>AKUN</span></div>
           <div><strong>{flags.filter((flag) => flag.status === 'pending').length}</strong><span>LAPORAN AKTIF</span></div>
-          <div><strong>{logs.length}</strong><span>LOG AKTIVITAS</span></div>
+          <div><strong>{logsTotal}</strong><span>LOG AKTIVITAS</span></div>
         </div>
       </section>
 
@@ -78,10 +82,7 @@ export function AdminPage() {
               setNotice(`Akun ${user.email} berhasil dibuat.`);
             }} onError={setError} />}
             {tab === 'flags' && <FlagsPanel flags={flags} onChange={changeFlag} />}
-            {tab === 'logs' && <LogsPanel logs={logs} token={token!} onCreated={(log) => {
-              setLogs((current) => [...current, log]);
-              setNotice('Audit log berhasil dicatat.');
-            }} onError={setError} />}
+            {tab === 'logs' && <LogsPanel token={token!} />}
           </>
         )}
       </section>
@@ -163,64 +164,159 @@ function FlagsPanel({ flags, onChange }: { flags: Flag[]; onChange: (flag: Flag,
   );
 }
 
-function LogsPanel({
-  logs,
-  token,
-  onCreated,
-  onError,
-}: {
-  logs: AuditLog[];
-  token: string;
-  onCreated: (log: AuditLog) => void;
-  onError: (message: string | null) => void;
-}) {
-  const [action, setAction] = useState('');
-  const [targetTable, setTargetTable] = useState('STALLS');
-  const [targetId, setTargetId] = useState('');
-  const [metadata, setMetadata] = useState('');
-  const [busy, setBusy] = useState(false);
+function LogsPanel({ token }: { token: string }) {
+  const [filters, setFilters] = useState<Omit<AuditLogFilters, 'page' | 'pageSize'>>({});
+  const [form, setForm] = useState({ action: '', targetTable: '', targetId: '', userId: '', from: '', to: '' });
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detail, setDetail] = useState<AuditLog | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailReload, setDetailReload] = useState(0);
+  const totalPages = Math.ceil(total / pageSize);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    listAuditLogs(token, { page, pageSize, ...filters }, controller.signal)
+      .then((result) => {
+        setLogs(result.items);
+        setTotal(result.pagination.total);
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return;
+        setError(reason instanceof Error ? reason.message : 'Audit log gagal dimuat.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [filters, page, pageSize, reload, token]);
+
+  useEffect(() => {
+    if (detailId === null) return;
+    let active = true;
+    setDetailLoading(true);
+    setDetailError(null);
+    setDetail(null);
+    getAuditLog(detailId, token)
+      .then((item) => { if (active) setDetail(item); })
+      .catch((reason: unknown) => {
+        if (active) setDetailError(reason instanceof Error ? reason.message : 'Detail audit log gagal dimuat.');
+      })
+      .finally(() => { if (active) setDetailLoading(false); });
+    return () => { active = false; };
+  }, [detailId, detailReload, token]);
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
-    onError(null);
-    try {
-      const log = await createAuditLog({
-        action: action.trim(),
-        targetTable,
-        targetId: Number(targetId),
-        metadata: metadata.trim() || null,
-      }, token);
-      setAction('');
-      setTargetId('');
-      setMetadata('');
-      onCreated(log);
-    } catch (reason) {
-      onError(reason instanceof Error ? reason.message : 'Audit log tidak dapat disimpan.');
-    } finally {
-      setBusy(false);
-    }
+    setPage(1);
+    setFilters({
+      ...(form.action.trim() ? { action: form.action.trim() } : {}),
+      ...(form.targetTable ? { targetTable: form.targetTable } : {}),
+      ...(form.targetId ? { targetId: Number(form.targetId) } : {}),
+      ...(form.userId ? { userId: Number(form.userId) } : {}),
+      ...(form.from ? { from: form.from } : {}),
+      ...(form.to ? { to: form.to } : {}),
+    });
+  }
+
+  function clearFilters() {
+    setForm({ action: '', targetTable: '', targetId: '', userId: '', from: '', to: '' });
+    setFilters({});
+    setPage(1);
   }
 
   return (
     <>
-      <div className="admin-section-heading"><div><span className="eyebrow">CATATAN SISTEM</span><h2>Audit log</h2></div><span>{logs.length} catatan</span></div>
-      <form className="admin-create-form panel" onSubmit={submit}>
-        <h3>Catat aktivitas</h3>
-        <div className="admin-form-grid">
-          <label className="field">Aksi<input value={action} onChange={(event) => setAction(event.target.value)} maxLength={50} required placeholder="Contoh: REVIEW_MODERATED" /></label>
-          <label className="field">Tabel<input value={targetTable} onChange={(event) => setTargetTable(event.target.value)} maxLength={50} required /></label>
-          <label className="field">ID data<input type="number" value={targetId} onChange={(event) => setTargetId(event.target.value)} min="1" step="1" required /></label>
-          <label className="field">Metadata<input value={metadata} onChange={(event) => setMetadata(event.target.value)} maxLength={4000} /></label>
+      <div className="admin-section-heading">
+        <div><span className="eyebrow">CATATAN SISTEM</span><h2>Audit log</h2></div>
+        <span>{total} catatan · ditulis otomatis oleh backend</span>
+      </div>
+      <form className="audit-filter-form panel" onSubmit={applyFilters}>
+        <label className="field">Aksi<input value={form.action} onChange={(event) => setForm((value) => ({ ...value, action: event.target.value }))} maxLength={50} placeholder="Contoh: CREATE_MENU" /></label>
+        <label className="field">Tabel
+          <select value={form.targetTable} onChange={(event) => setForm((value) => ({ ...value, targetTable: event.target.value }))}>
+            <option value="">Semua tabel</option>
+            {['USERS', 'STALLS', 'MENU_ITEMS', 'REVIEWS', 'LIKES', 'FLAGS'].map((table) => <option value={table} key={table}>{table}</option>)}
+          </select>
+        </label>
+        <label className="field">ID target<input type="number" min="1" step="1" value={form.targetId} onChange={(event) => setForm((value) => ({ ...value, targetId: event.target.value }))} /></label>
+        <label className="field">ID pengguna<input type="number" min="1" step="1" value={form.userId} onChange={(event) => setForm((value) => ({ ...value, userId: event.target.value }))} /></label>
+        <label className="field">Dari tanggal<input type="date" value={form.from} onChange={(event) => setForm((value) => ({ ...value, from: event.target.value }))} /></label>
+        <label className="field">Sampai tanggal<input type="date" value={form.to} onChange={(event) => setForm((value) => ({ ...value, to: event.target.value }))} /></label>
+        <div className="audit-filter-actions">
+          <button className="button button-dark" type="submit">Terapkan filter</button>
+          <button className="button button-light" type="button" onClick={clearFilters}>Reset</button>
         </div>
-        <button className="button button-dark" disabled={busy}>{busy ? 'Menyimpan…' : '＋ Catat aktivitas'}</button>
       </form>
-      {logs.length === 0 ? <div className="empty-state"><h3>Belum ada catatan audit.</h3></div> : (
-        <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Waktu</th><th>Aksi</th><th>Tabel</th><th>ID data</th><th>Detail</th></tr></thead><tbody>
-          {logs.map((log) => <tr key={log.id}><td>{formatDate(log.createdAt)}</td><td>{log.action}</td><td>{log.targetTable}</td><td>#{log.targetId}</td><td>{log.metadata || '—'}</td></tr>)}
-        </tbody></table></div>
+      {error && <div className="inline-error" role="alert"><span>{error}</span><button className="button button-light" onClick={() => setReload((value) => value + 1)}>Coba lagi</button></div>}
+      {loading ? (
+        <div className="loading-grid audit-loading" aria-label="Memuat audit log"><div className="skeleton-card"><div /><span /><span /></div></div>
+      ) : !error && logs.length === 0 ? (
+        <div className="empty-state"><h3>Tidak ada audit log yang cocok.</h3><p>Ubah filter atau lakukan aktivitas di aplikasi.</p></div>
+      ) : !error && (
+        <>
+          <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Waktu</th><th>Pengguna</th><th>Aksi</th><th>Tabel</th><th>ID target</th><th></th></tr></thead><tbody>
+            {logs.map((log) => <tr key={log.id}>
+              <td>{formatDate(log.createdAt)}</td>
+              <td>{log.userName}<small className="audit-user-email">{log.userEmail} · #{log.userId}</small></td>
+              <td><span className="audit-action">{log.action}</span></td>
+              <td>{log.targetTable}</td>
+              <td>#{log.targetId}</td>
+              <td><button className="button button-quiet" onClick={() => setDetailId(log.id)}>Detail</button></td>
+            </tr>)}
+          </tbody></table></div>
+          <nav className="pagination audit-pagination" aria-label="Pagination audit log">
+            <span>Halaman {page} dari {totalPages} <small>· {total} catatan</small></span>
+            <div>
+              <button className="button button-light" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>← Sebelumnya</button>
+              <button className="button button-light" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>Berikutnya →</button>
+            </div>
+          </nav>
+        </>
+      )}
+      {detailId !== null && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setDetailId(null);
+        }}>
+          <section className="panel dialog audit-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="audit-detail-title">
+            <button className="dialog-close" type="button" aria-label="Tutup detail" onClick={() => setDetailId(null)}>×</button>
+            <span className="eyebrow">CATATAN AUDIT · #{detailId}</span>
+            <h2 id="audit-detail-title">Detail aktivitas</h2>
+            {detailLoading ? <div className="review-loading" aria-label="Memuat detail audit"><span /><span /></div>
+              : detailError ? <div className="inline-error" role="alert"><span>{detailError}</span><button className="button button-light" onClick={() => setDetailReload((value) => value + 1)}>Coba lagi</button></div>
+                : detail && <AuditLogDetails log={detail} />}
+          </section>
+        </div>
       )}
     </>
+  );
+}
+
+function AuditLogDetails({ log }: { log: AuditLog }) {
+  const metadata = log.metadata;
+  const value = (key: string) => typeof metadata === 'object' && metadata ? metadata[key] : undefined;
+
+  return (
+    <dl className="audit-detail-list">
+      <div><dt>Waktu</dt><dd>{formatDate(log.createdAt)}</dd></div>
+      <div><dt>Pengguna</dt><dd>{log.userName} ({log.userEmail}) · #{log.userId}</dd></div>
+      <div><dt>Aksi</dt><dd>{log.action}</dd></div>
+      <div><dt>Target</dt><dd>{log.targetTable} · #{log.targetId}</dd></div>
+      <div><dt>Role</dt><dd>{String(value('role') ?? '—')}</dd></div>
+      <div><dt>Hasil</dt><dd>{String(value('result') ?? '—')}</dd></div>
+      <div><dt>IP address</dt><dd>{String(value('ip_address') ?? '—')}</dd></div>
+      <div><dt>User agent</dt><dd className="audit-user-agent">{String(value('user_agent') ?? '—')}</dd></div>
+      <div className="audit-metadata-row"><dt>Metadata</dt><dd><pre>{JSON.stringify(metadata, null, 2) ?? '—'}</pre></dd></div>
+    </dl>
   );
 }
 

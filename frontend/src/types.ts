@@ -101,9 +101,11 @@ export interface ManagedUser {
 export interface AuditLog {
   id: number;
   userId: number;
+  userName: string;
+  userEmail: string;
   action: string;
   targetTable: string;
   targetId: number;
-  metadata: string | null;
+  metadata: Record<string, unknown> | null;
   createdAt: string | null;
 }

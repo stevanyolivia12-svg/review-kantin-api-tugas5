@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { ApiError, getCurrentUser, login as loginRequest, register as registerRequest } from './api';
+import { ApiError, getCurrentUser, login as loginRequest, logout as logoutRequest, register as registerRequest } from './api';
 import type { AuthSession, AuthUser } from './types';
 
 const TOKEN_KEY = 'review-kantin-access-token';
@@ -68,6 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
+    if (token) {
+      void logoutRequest(token).catch((error: unknown) => {
+        console.error('Logout lokal tetap berhasil, tetapi audit logout gagal dikirim.', error);
+      });
+    }
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
